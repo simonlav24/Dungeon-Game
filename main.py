@@ -1,18 +1,68 @@
 from math import fabs, sqrt, cos, sin, pi, floor, ceil
 from random import uniform, randint, choice
 import pygame
+#from pygame import gfxdraw
+pygame.init()
+from vector import *
 
+#pygame.font.init()
+#myfont = pygame.font.SysFont('Arial', 12)
+fpsClock = pygame.time.Clock()
+fps = 60
+winWidth = 32 * 16
+winHeight = 32 * 9
+win = pygame.display.set_mode((winWidth,winHeight))
+
+WHITE = (255,255,255)
+GREY = (100,100,100)
+BLACK = (0,0,0)
+BACK = GREY
+BORDER = BLACK
+RIGHT = 0
+UP = 1
+LEFT = 2
+DOWN = 3
+
+NULL = 0
+PLAYER = 1
+ENEMY = 2
+
+DOT = 0
+
+DEBUG = False
 
 ################################################################################ 
-# enters:
-#  1
-# 2 0
-#  3
+spriteWidth = 32
 
-class Mat:
-	def __init__(self, dims, values=0):
-		self.dims = dims
-		self.array = [values] * dims[0] * dims[1]
+camPos = Vector()
+camTarget = Vector()
+
+def updateCam(target):
+	camTarget.x = target.pos.x - winWidth / 2
+	camTarget.y = target.pos.y - winHeight / 2
+	camPos.x = camTarget.x
+	camPos.y = camTarget.y
+
+def point2world(pos):
+	return pos - camPos - Vector(8,8)
+
+with open("dungeon.txt", 'r') as file:
+	string = file.readline().split()
+	dungeonDims = (int(string[0]), int(string[1]))
+	string = file.readline()
+	string = string.replace(',', '')
+	string = string.replace('[', '')
+	string = string.replace(']', '')
+	dungeonArr = [int(i) for i in string.split()]
+	
+	
+
+class Dungeon:
+	def __init__(self):
+		self.array = dungeonArr
+		self.dims = dungeonDims
+		self.surf = None
+		self.makeSurf()
 	def __getitem__(self, pos):
 		x, y = pos
 		if not self.inBound(pos):
@@ -23,271 +73,250 @@ class Mat:
 		if not self.inBound(pos):
 			raise Exception("Mat: out of boundary")
 		self.array[x * self.dims[1] + y] = value
-	def __str__(self):
-		string = "mat " + str(self.dims[0]) + "x" +str(self.dims[1]) + ":\n"
-		for y in range(self.dims[1]):
-			for x in range(self.dims[0]):
-				string += str(self.array[x * self.dims[1] + y]) + " "
-			string += "\n"
-		string += "\n"
-		return string
-	def copy(self):
-		copied = Mat(self.dims)
-		for y in range(self.dims[1]):
-			for x in range(self.dims[0]):
-				copied[x,y] = self[x,y]
-		return copied
 	def inBound(self, pos):
 		x, y = pos
 		if x < 0 or x >= self.dims[0] or y < 0 or y >= self.dims[1]:
 			return False
 		return True
-
-def fillRoom(enters, dims):
-	mat = Mat(dims)
-	
-	if sum(enters) == 0:
-		return mat
-	
-	ends = []
-	if enters[0]:
-		ends.append((dims[0] - 1, dims[1]//2))
-	if enters[1]:
-		ends.append((dims[0]//2, 0))
-	if enters[2]:
-		ends.append((0, dims[1]//2))
-	if enters[3]:
-		ends.append((dims[0]//2, dims[1] - 1))
-	
-	for i in ends:
-		mat[i] = 1
-	
-	accessible = False
-	while not accessible:
-		if len(ends) == 1:
-			break
-		if len(ends) == 2:
-			if bfs(mat, ends[0], ends[1]):
-				break
-		if len(ends) == 3:
-			if bfs(mat, ends[0], ends[1]) and bfs(mat, ends[0], ends[2]):
-				break
-		if len(ends) == 4:
-			if bfs(mat, ends[0], ends[1]) and bfs(mat, ends[0], ends[2]) and bfs(mat, ends[0], ends[3]):
-				break
-		x = randint(0,dims[0]-1)
-		y = randint(0,dims[1]-1)
-		mat[x, y] = 1
-	
-	
-	
-	# print(mat)
-	return mat
-
-def inmat(pos, dims):
-	# print("inmat:", pos, end=" ")
-	res = not (pos[0] >= dims[0] or pos[0] < 0 or pos[1] >= dims[1] or pos[1] < 0)
-	# print(res)
-	return res
-
-def bfs(mat, start, end):
-	visited = mat.copy()
-	que = [start]
-	
-	found = False
-	while not found:
-		if len(que) == 0:
-			break
-		start = que.pop(0)
-		visited[start] = 2
-		if end in que:
-			found = True
-		if inmat((start[0] + 1, start[1]), mat.dims) and visited[start[0] + 1, start[1]] == 1:
-			que.append((start[0] + 1, start[1]))
-			visited[start[0] + 1, start[1]] = 3
-		if inmat((start[0], start[1] + 1), mat.dims) and visited[start[0], start[1] + 1] == 1:
-			que.append((start[0], start[1] + 1))
-			visited[start[0], start[1] + 1] = 3
-		if inmat((start[0] - 1, start[1]), mat.dims) and visited[start[0] - 1, start[1]] == 1:
-			que.append((start[0] - 1, start[1]))
-			visited[start[0] - 1, start[1]] = 3
-		if inmat((start[0], start[1] - 1), mat.dims) and visited[start[0], start[1] - 1] == 1:
-			que.append((start[0], start[1] - 1))
-			visited[start[0], start[1] - 1] = 3
+	def makeSurf(self):
+		self.surf = pygame.Surface((self.dims[0] * spriteWidth, self.dims[0] * spriteWidth))
+		self.surf.fill(BORDER)
+		for x in range(self.dims[0]):
+			for y in range(self.dims[1]):
+				if self[x,y] == 1:
+					pygame.draw.rect(self.surf, BACK, ((x * spriteWidth, y * spriteWidth), (spriteWidth, spriteWidth)))
+	def draw(self):
+		win.blit(self.surf, point2world(Vector()))
+	def borderAt(self, pos):
+		if pos[0] < 0 or pos[0] >= self.surf.get_width() or pos[1] < 0 or pos[1] >= self.surf.get_height():
+			return True
+		return self.surf.get_at((int(pos[0]), int(pos[1]))) == BORDER
 		
-	return found
-	
-def bfs2kill(mat, start, end):
-	visited = mat.copy()
-	que = [start]
-	count = 0
-	# print("bfs to kill", start, end)
-	# print(mat[start], mat[end])
-	while True:
-		# print(len(que), "", end=" ")
-		if len(que) == 0:
-			break
-		start = que.pop(0)
-		visited[start] = 2
-		if inmat((start[0] + 1, start[1]), mat.dims) and visited[start[0] + 1, start[1]] == 1:
-			que.append((start[0] + 1, start[1]))
-			visited[start[0] + 1, start[1]] = 3
-		if inmat((start[0], start[1] + 1), mat.dims) and visited[start[0], start[1] + 1] == 1:
-			que.append((start[0], start[1] + 1))
-			visited[start[0], start[1] + 1] = 3
-		if inmat((start[0] - 1, start[1]), mat.dims) and visited[start[0] - 1, start[1]] == 1:
-			que.append((start[0] - 1, start[1]))
-			visited[start[0] - 1, start[1]] = 3
-		if inmat((start[0], start[1] - 1), mat.dims) and visited[start[0], start[1] - 1] == 1:
-			que.append((start[0], start[1] - 1))
-			visited[start[0], start[1] - 1] = 3
-		# print(visited)
 		
-	for i in range(mat.dims[0]):
-		for j in range(mat.dims[1]):
-			if visited[i,j] == 1:
-				mat[i,j] = 0
-	
-
+		
 ################################################################################ Classes
-outerGrid = (7,4)
-innerGrid = (5,5)
-globalEnter = (1,0,1,0)
 
-scale = 5
-colorBack = (255,255,255)
-colorPath = (0,0,0)
+class Character:
+	friction = 0.8
+	def __init__(self):
+		self.initialize()
+	def initialize(self):
+		self.tag = NULL
+		objects.append(self)
+		self.pos = Vector()
+		self.vel = Vector()
+		self.acc = Vector()
+		self.color = (0,255,0)
+	def applyForce(self):
+		pass
+	def step(self):
+		# force
+		self.applyForce()
+		# dynamics
+		self.vel += self.acc
+		self.vel *= Character.friction
+		self.acc *= 0
+		# collision
+		ppos = self.pos + self.vel
+		ppos = self.mapCollision(ppos)
+		self.pos = ppos
+		
+		self.secondaryStep()
+	def secondaryStep(self):
+		pass
+	def mapCollision(self, ppos):
+		if self.vel.x <= 0:
+			if dungeon.borderAt((ppos.x, self.pos.y)) or dungeon.borderAt((ppos.x, self.pos.y + 16 * 0.9)):
+				ppos.x = 16 * int(ppos.x / 16) + 16
+				self.vel.x = 0
+		else:
+			if dungeon.borderAt((ppos.x + 16, self.pos.y)) or dungeon.borderAt((ppos.x + 16, self.pos.y + 16 * 0.9)):
+				ppos.x = 16 * int(ppos.x / 16)
+				self.vel.x = 0
+		if self.vel.y <= 0:
+			if dungeon.borderAt((ppos.x, ppos.y)) or dungeon.borderAt((ppos.x + 16 * 0.9, ppos.y)):
+				ppos.y = 16 * int(ppos.y / 16) + 16
+				self.vel.y = 0
+		else:
+			if dungeon.borderAt((ppos.x, ppos.y + 16)) or dungeon.borderAt((ppos.x + 16 * 0.9, ppos.y + 16)):
+				ppos.y = 16 * int(ppos.y / 16) 
+				self.vel.y = 0
+		return ppos
+	def draw(self):
+		pygame.draw.rect(win, self.color, (point2world(self.pos), (16,16)))
+		
 
-start = None
-end = None
-if globalEnter[0]:
-	pos = (outerGrid[0] * innerGrid[0] - 1, (outerGrid[1] * innerGrid[1]) // 2)
-	if not start:
-		start = pos
-	else:
-		end = pos
-if globalEnter[1]:
-	pos = ((outerGrid[0] * innerGrid[0]) // 2, 0)
-	if not start:
-		start = pos
-	else:
-		end = pos
-if globalEnter[2]:
-	pos = (0, (outerGrid[1] * innerGrid[1]) // 2)
-	if not start:
-		start = pos
-	else:
-		end = pos
-if globalEnter[3]:
-	pos = ((outerGrid[0] * innerGrid[0]) // 2, outerGrid[1] * innerGrid[1] - 1)
-	if not start:
-		start = pos
-	else:
-		end = pos
-
-print(start, end)
+class Player(Character):
+	force = 0.5
+	size = 16
+	def __init__(self):
+		self.tag = PLAYER
+		self.pos = Vector(0, 16*10)
+		self.vel = Vector()
+		self.acc = Vector()
+		self.direction = Vector()
+		self.lastKey = None
+		self.move = False
+		self.color = (255,255,0)
+		self.stunned = None
+	def applyForce(self):
+		if self.stunned:
+			self.acc = (self.pos + Vector(8,8) - self.stunned).normalize() * 10
+			self.stunned = None
+		self.direction *= 0
+		self.move = False
+		if keys[pygame.K_w] or keys[pygame.K_UP]:
+			self.acc.y = -Player.force
+			self.direction[1] = -1
+			self.move = True
+		if keys[pygame.K_a] or keys[pygame.K_LEFT]:
+			self.acc.x = -Player.force
+			self.direction[0] = -1
+			self.move = True
+		if keys[pygame.K_s] or keys[pygame.K_DOWN]:
+			self.acc.y = Player.force
+			self.direction[1] = 1
+			self.move = True
+		if keys[pygame.K_d] or keys[pygame.K_RIGHT]:
+			self.acc.x = Player.force
+			self.direction[0] = 1
+			self.move = True
+		if not self.move:
+			if self.lastKey == 0:
+				self.direction.x = 1
+			elif self.lastKey == 1:
+				self.direction.y = -1
+			elif self.lastKey == 2:
+				self.direction.x = -1
+			elif self.lastKey == 3:
+				self.direction.y = 1
+	def secondaryStep(self):
+		for e in objects:
+			if e.tag != ENEMY:
+				continue
+			if dist(e.pos + Vector(8,8), self.pos + Vector(8,8)) > 16:
+				continue
+			self.stunned = e.pos + Vector(8,8)
+			break
+	def attack(self):
+		SwordAttack()
+		
+	def draw(self):
+		pygame.draw.rect(win, self.color, (point2world(self.pos), (16,16)))
+		pygame.draw.circle(win, (150,150,0), point2world(self.pos + Vector(8,8) + 8 * self.direction), 2)
+		
+class SwordAttack:
+	def __init__(self):
+		self.tag = NULL
+		objects.append(self)
+		self.done = False
+		self.direction = vectorCopy(player.direction)
+	def step(self):
+		if self.done:
+			objects.remove(self)
+			return
+		# sword stuff
+		for obj in objects:
+			if obj.tag != ENEMY:
+				continue
+			if dist(obj.pos + Vector(8,8), player.pos + Vector(8,8) + 16 * (1.4) * player.direction) > 24:
+				continue
+			obj.direction = self.direction
+			obj.mode = 2
+			obj.timer = 0
+		self.done = True
+	def draw(self):
+		pygame.draw.circle(win, WHITE, point2world(player.pos + Vector(8,8) + 16 * (1.4) * player.direction), 16)
+		
+class Enemy(Character):
+	force = 0.4
+	stunned = 0
+	wander = 1
+	hit = 2
+	chase = 3
+	def __init__(self):
+		self.initialize()
+		self.tag = ENEMY
+		self.timer = 0
+		self.mode = 0
+		self.direction = vectorUnitRandom()
+		self.health = 3
+	def applyForce(self):
+		if self.mode == Enemy.stunned:
+			self.acc *= 0
+		elif self.mode == Enemy.wander:
+			self.acc = Enemy.force * self.direction
+		elif self.mode == Enemy.hit:
+			self.acc = player.direction * 10
+		elif self.mode == Enemy.chase:
+			self.acc = Enemy.force * (player.pos - self.pos).normalize()
+	def secondaryStep(self):
+		if self.health <= 0:
+				objects.remove(self)
+		if self.mode == Enemy.stunned:
+			self.timer += 1
+			if self.timer == 1 * fps:
+				self.mode = Enemy.wander
+		if self.mode == Enemy.hit:
+			self.health -= 1
+			self.mode = Enemy.stunned
+			self.timer = 0
+		if self.mode == Enemy.wander:
+			self.timer += 1
+			if self.timer % fps == 0:
+				self.direction = vectorUnitRandom()
+			if self.timer % fps/2 == 0:
+				if self.search():
+					self.mode = Enemy.chase
+					self.timer = 0
+		if self.mode == Enemy.chase:
+			self.timer += 1
+			if self.timer % (fps * 3) == 0:
+				if not self.search():
+					self.mode = Enemy.wander
+	def search(self):
+		ray = (player.pos - self.pos).normalize()
+		for i in range(20):
+			checkPos = self.pos + ray * (i * 10)
+			if DEBUG: extraAppend(DOT, checkPos, (0,0,255), 2*fps)
+			if dungeon.borderAt(checkPos):
+				return False
+			if dist(player.pos, checkPos) < 16:
+				return True
+		
+	def draw(self):
+		pygame.draw.rect(win, self.color, (point2world(self.pos), (16,16)))
+		if self.mode == 0 and self.timer < fps * 0.25:
+			pygame.draw.rect(win, (255,0,0), (point2world(self.pos), (16,16)))
 
 ################################################################################ Setup
+extra = []
+def extraAppend(tag, pos, color, delay, params=None):
+	e = [tag, pos, color, delay]
+	if params: e.append(params)
+	extra.append(e)
+def extraDraw():
+	for e in extra:
+		if e[0] == DOT:
+			win.set_at(point2world(e[1]).vec2tupint(), e[2])
+			e[3] -= 1
+			if e[3] == 0:
+				extra.remove(e)
 
-M = fillRoom(globalEnter, outerGrid)
-print("level:", M)
-
-Mentries = Mat(outerGrid, None)
-for i in range(len(M.array)):
-	enters = [0,0,0,0]
-	pos = (i % M.dims[0], i // M.dims[0])
-	# print("check for pos:", pos, end=" ")
-	if globalEnter[0] and pos == (M.dims[0] - 1, M.dims[1]//2): enters[0] = 1
-	if globalEnter[1] and pos == (M.dims[0]//2, 0): enters[1] = 1
-	if globalEnter[2] and pos == (0, M.dims[1]//2): enters[2] = 1
-	if globalEnter[3] and pos == (M.dims[0]//2, M.dims[1] - 1): enters[3] = 1
-	
-	if M[pos] == 1:
-		if inmat((pos[0] + 1, pos[1]), M.dims) and M[pos[0] + 1, pos[1]] == 1: enters[0] = 1#; print("neighbor at 0", end=" ")
-		if inmat((pos[0], pos[1] - 1), M.dims) and M[pos[0], pos[1] - 1] == 1: enters[1] = 1#; print("neighbor at 1", end=" ")
-		if inmat((pos[0] - 1, pos[1]), M.dims) and M[pos[0] - 1, pos[1]] == 1: enters[2] = 1#; print("neighbor at 2", end=" ")
-		if inmat((pos[0], pos[1] + 1), M.dims) and M[pos[0], pos[1] + 1] == 1: enters[3] = 1#; print("neighbor at 3", end=" ")
-	# print("enter:", enters)
-	Mentries[pos] = enters
-# print("entries:", Mentries)
-
-# print(1/0)
-
-dun = Mat(outerGrid, None)
-for i in range(len(dun.array)):
-	pos = (i % dun.dims[0], i // dun.dims[0])
-	# print(pos, end=" ")
-	if M[pos] == 1: dun[pos] = fillRoom(Mentries[pos], innerGrid)
-
-dungeon = Mat((outerGrid[0] * innerGrid[0], outerGrid[1] * innerGrid[1]))
-for i in range(outerGrid[0]):
-	for j in range(outerGrid[1]):
-		for k in range(innerGrid[0]):
-			for l in range(innerGrid[1]):
-				dungeonPos = (i * innerGrid[0] + k, j * innerGrid[1] + l)
-				dunPos = ((i,j), (k,l))
-				if dun[dunPos[0]]:
-					# print(dungeonPos, dunPos)
-					dungeon[dungeonPos] = dun[dunPos[0]][dunPos[1]]
-	
-# print("dungeon is complete")
-# print(dungeon)
-
-bfs2kill(dungeon, start, end)
-
-def pixelSurf(dungeon):
-	surf = pygame.Surface((outerGrid[0] * innerGrid[0], outerGrid[1] * innerGrid[1]))
-	surf.fill(colorBack)
-	for x in range(outerGrid[0] * innerGrid[0]):
-		for y in range(outerGrid[1] * innerGrid[1]):
-			if dungeon[x,y] == 1:
-				surf.set_at((x,y), colorPath)
-	return surf
-
-def octagons(dungeon):
-	octSize = 20
-	surf = pygame.Surface((dungeon.dims[0] * octSize, dungeon.dims[1] * octSize))
-	surf.fill(colorBack)
-	quart = octSize//4
-	octPoints = [(quart, 0), (3*quart, 0), (octSize, quart), (octSize, 3*quart), (3*quart, octSize), (quart, octSize), (0, 3*quart), (0, quart)]
-	for x in range(outerGrid[0] * innerGrid[0]):
-		for y in range(outerGrid[1] * innerGrid[1]):
-			if dungeon[x,y] == 1:
-				pos = (x * octSize, y * octSize)
-				
-				octPoints = [(quart, 0), (3*quart, 0), (octSize, quart), (octSize, 3*quart), (3*quart, octSize), (quart, octSize), (0, 3*quart), (0, quart)]
-				
-				if dungeon.inBound((x + 1, y)) and dungeon[x + 1, y] == 1:
-					octPoints[1] = (octSize, 0); octPoints[2] = (octSize, 0); octPoints[3] = (octSize, octSize); octPoints[4] = (octSize, octSize)
-				if dungeon.inBound((x - 1, y)) and dungeon[x - 1, y] == 1:
-					octPoints[0] = (0,0); octPoints[5] = (0, octSize); octPoints[6] = (0, octSize); octPoints[7] = (0,0)
-				if dungeon.inBound((x, y - 1)) and dungeon[x, y - 1] == 1:
-					octPoints[0] = (0,0); octPoints[1] = (octSize, 0); octPoints[2] = (octSize, 0); octPoints[7] = (0,0)
-				if dungeon.inBound((x, y + 1)) and dungeon[x, y + 1] == 1:
-					octPoints[3] = (octSize, octSize); octPoints[4] = (octSize, octSize); octPoints[5] = (0, octSize); octPoints[6] = (0, octSize)
-				
-				pygame.draw.polygon(surf, colorPath, [(pos[0] + i[0], pos[1] + i[1]) for i in octPoints])
-	return surf
+player = Player()
+dungeon = Dungeon()
 
 
+objects = []
 
-pygame.init()
-fpsClock = pygame.time.Clock()
-winWidth = 800#outerGrid[0] * innerGrid[0] * scale
-winHeight = 600#outerGrid[1] * innerGrid[1] * scale
-win = pygame.display.set_mode((winWidth,winHeight))
-
-surf = octagons(dungeon)
-
-# win.blit(pygame.transform.scale(surf, (winWidth, winHeight)), (0,0))
-win.blit(surf, (0,0))
-pygame.image.save(surf, "dungeon" + ".png")
-# worms.py -map dun -rg -ratio 800 -dark -used
+for i in range(20):
+	e = Enemy()
+	e.pos = Vector(spriteWidth * randint(0, dungeonDims[0]), spriteWidth * randint(0, dungeonDims[1]))
 
 ################################################################################ Main Loop
 run = True
 while run:
-	fpsClock.tick(60)
+	fpsClock.tick(fps)
 	for event in pygame.event.get():
 		if event.type == pygame.QUIT:
 			run = False
@@ -296,10 +325,25 @@ while run:
 			#mouse position:
 			mouse_pos = pygame.mouse.get_pos()
 			print("mouse pressed once")
-		if event.type == pygame.KEYDOWN:
-			#key pressed once:
-			if event.key == pygame.K_x:
-				print("pressed once")
+		if event.type == pygame.KEYUP:
+			# movement
+			if event.key == pygame.K_UP:
+				player.direction[1] = 0
+				player.lastKey = 1
+			if event.key == pygame.K_DOWN:
+				player.direction[1] = 0
+				player.lastKey = 3
+			if event.key == pygame.K_RIGHT:
+				player.direction[0] = 0
+				player.lastKey = 0
+			if event.key == pygame.K_LEFT:
+				player.direction[0] = 0
+				player.lastKey = 2
+			# attack
+			if event.key == pygame.K_SPACE:
+				player.attack()
+			if event.key == pygame.K_d:
+				DEBUG = not DEBUG
 	keys = pygame.key.get_pressed()
 	if keys[pygame.K_ESCAPE]:
 		run = False
@@ -307,12 +351,19 @@ while run:
 	if keys[pygame.K_z]:
 		print("pressing")
 	
+	updateCam(player)
 	# step:
-	
-	
+	player.step()
+	for o in objects:
+		o.step()
 	
 	# draw:
-	# win.fill((255,255,255))
+	win.fill((0,0,0))
+	dungeon.draw()
+	player.draw()
+	for o in objects:
+		o.draw()
+	extraDraw()
 	
 	pygame.display.update()
 pygame.quit()
