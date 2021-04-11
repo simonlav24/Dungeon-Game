@@ -299,7 +299,6 @@ surf = octagons(dungeon)
 # win.blit(pygame.transform.scale(surf, (winWidth, winHeight)), (0,0))
 win.blit(surf, (0,0))
 pygame.image.save(surf, "dungeon" + ".png")
-# worms.py -map dun -rg -ratio 800 -dark -used
 
 ################################################################################ Main Loop
 run = True
